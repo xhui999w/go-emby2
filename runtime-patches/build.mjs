@@ -9,7 +9,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const [input, output] = process.argv.slice(2);
 assert.ok(input && output, 'Usage: node build.mjs input-binary output-binary');
 const binary = await readFile(input);
-const manifest = {version: '2026.11.20-000004', upstream_binary_sha256: '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', assets: {}};
+const manifest = {version: '2026.11.20-000005', upstream_binary_sha256: '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', assets: {}};
 assert.equal(createHash('sha256').update(binary).digest('hex'), '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', 'Unsupported upstream binary; review and pin its assets before updating');
 assert.equal(binary.subarray(0, 4).toString('hex'), '7f454c46');
 assert.equal(binary[4], 2);
@@ -31,7 +31,7 @@ assert.ok(versionOffset >= 0 && binary.indexOf(oldVersion, versionOffset + 1) ==
 assert.equal(oldVersion.length, newVersion.length);
 assert.ok(dataRanges.some(([start, end]) => versionOffset >= start && versionOffset + oldVersion.length <= end));
 newVersion.copy(binary, versionOffset);
-for (const name of ['admin-directories.js', 'admin-libraries.js', 'app.js', 'browse.js']) {
+for (const name of ['admin-directories.js', 'admin-libraries.js', 'app.js', 'browse.js', 'components.js']) {
   const original = await readFile(path.join(directory, 'upstream', name));
   const modified = await readFile(path.join(directory, 'web', name), 'utf8');
   const result = await minify(modified, {mangle: {toplevel: false}, compress: true, format: {comments: false}});

@@ -29,6 +29,8 @@ for name in filter(None, files):
         if pattern.search(content):
             problems.append((name, 'possible credential'))
     ip_content = re.sub(r'"Version":\s*"[0-9.]+"', '"Version":""', content)
+    # SVG path coordinates contain adjacent decimal values, not network addresses.
+    ip_content = re.sub(r'''(<path\b[^>]*\bd=)(["']).*?\2''', r'\1""', ip_content)
     for value in ip_pattern.findall(ip_content):
         try:
             address = ipaddress.ip_address(value)

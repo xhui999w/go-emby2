@@ -126,8 +126,6 @@ async function browse() {
   const generation = ++browseGeneration;
   const app = $("#app");
   app.replaceChildren();
-  const heroSlot = UI.el("div", {class:"featured-slot", "aria-busy":"true"});
-  app.append(heroSlot);
   const alive = () => generation === browseGeneration && view === "browse";
   const titles = ["继续观看", "最近添加", "我的媒体库"];
   const holders = titles.map(title => UI.el("section", {class:"shelf-section"}, [UI.el("h2", {}, title), UI.LoadingSkeleton()]));
@@ -141,7 +139,7 @@ async function browse() {
     else if (latestError) failure(holders[1], titles[1], latestError);
   };
   const failure = (host, title, error) => host.replaceChildren(UI.el("h2", {}, title), UI.el("p", {class:"muted"}, "加载失败：" + error.message), UI.el("button", {class:"secondary", onclick:run(browse)}, "重试"));
-  // Start Latest immediately; independent shelves load concurrently.
+  // Latest and the independent shelves load concurrently.
   const latestTask = (async () => {
     try {
       const items = await api.getLatest({Limit:18, IncludeItemTypes:"Movie,Series", Fields:listParams.Fields, EnableTotalRecordCount:false});
@@ -149,10 +147,7 @@ async function browse() {
       latestItems = items;
       renderLatest();
       bindPosterMenus();
-      const featured = items.filter(x => ["Movie", "Series"].includes(x.Type) && (x.BackdropImageTags?.length || x.ImageTags?.Primary)).slice(0, 5);
-      if (featured.length) heroSlot.replaceWith(UI.FeaturedCarousel(featured));
-      else heroSlot.remove();
-    } catch (e) { if (alive()) { heroSlot.remove(); latestError = e; renderLatest(); } }
+    } catch (e) { if (alive()) { latestError = e; renderLatest(); } }
   })();
   await Promise.allSettled([
     latestTask,
