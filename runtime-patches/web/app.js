@@ -66,8 +66,10 @@ function renderDrawerSubmenu(id, title, icon, items, note = '') {
 function renderAdminDrawer(variant){
  const target=(n)=>variant==="files"?`navigateAdminSection(${n})`:n===0?"mediaPage()":`adminSection(${n})`;
  const link=(name,icon,action,current=false)=>`<button class="${UI.Choice.className}"${current?' aria-current="page"':''} onclick="${action}">${UI.DecorativeIcon(drawerIcon(icon), name)}<span>${name}</span></button>`;
+ const users = link('用户管理','users',target(1))+link('权限组管理','users',target(13));
+ const permissions = renderDrawerSubmenu('drawer-permissions', '用户权限', 'users', users);
  const enhancements = renderDrawerSubmenu('drawer-enhancements', '增强功能', 'settings', link('增强设置','settings',target(4))+link('字幕增强','sub',target(9))+link('TMDB','scraper',target(6))+link('Telegram Bot','users',target(7))+link('片头片尾','chapter',target(10))+link('代理设置','network',target(11)), '设置 · 字幕 · TMDB · Bot · 片头片尾 · 代理');
- return `<button id="drawer-backdrop" type="button" aria-label="关闭功能菜单" onclick="toggleDrawer(false)"></button><aside id="drawer" class="glass-card" data-glass-variant="nav">${link('返回影库','back','browseRoot()')}${link('控制台','dashboard',target(12))}${link('工具箱','settings',target(14))}${link('媒体管理','media',target(0))}${link('文件管理','files','filesPage()',variant==='files')}${link('刮削管理','scraper',target(8))}${link('媒体排序','sort',target(2))}${link('媒体信息','info',target(3))}${enhancements}${link('API','api',target(5))}${renderBuildFooter()}</aside>`;
+ return `<button id="drawer-backdrop" type="button" aria-label="关闭功能菜单" onclick="toggleDrawer(false)"></button><aside id="drawer" class="glass-card" data-glass-variant="nav">${link('返回影库','back','browseRoot()')}${link('控制台','dashboard',target(12))}${link('工具箱','settings',target(14))}${link('媒体管理','media',target(0))}${link('文件管理','files','filesPage()',variant==='files')}${link('刮削管理','scraper',target(8))}${link('媒体排序','sort',target(2))}${link('媒体信息','info',target(3))}${permissions}${enhancements}${link('API','api',target(5))}${renderBuildFooter()}</aside>`;
 }
 let drawerScrollY = null, drawerScrollView = null;
 function toggleDrawer(open) {
@@ -160,8 +162,7 @@ function openUserMenu(event) {
   ? userMenuTraktCache.status : {Enabled:false,Authorized:false};
  const entries=[
   {label:"同步Trakt",key:'trakt',hidden:!traktStatus.Enabled,action:()=>syncTraktMenu(traktStatus),icon:'trakt'},
-  ...(isAdmin?[{label:'用户权限',action:openUserPermissions,icon:'users'},
-    {label:'更新设置',action:checkUpdates,icon:'refresh'}]:[]),
+  ...(isAdmin?[{label:'更新设置',action:checkUpdates,icon:'refresh'}]:[]),
   {label:'修改密码',action:password,icon:'lock'},
   {label:'退出登录',action:logout,icon:'logout',danger:true}
  ];
@@ -181,19 +182,6 @@ function openUserMenu(event) {
  }).catch(()=>{});
 }
 
-function openUserPermissions(){
- if(!authVerified||!user?.Policy?.IsAdministrator||user?.MustChangePassword)return;
- let sheet;
- const open=section=>{
-  if(sheet.classList.contains('is-closing'))return;
-  sheet.addEventListener('close',()=>run(()=>admin(true,section))(),{once:true});
-  sheet.close();
- };
- sheet=UI.ActionSheet('用户权限',[
-  {label:'用户管理',icon:drawerIcon('users'),action:()=>open(1)},
-  {label:'权限组管理',icon:drawerIcon('users'),action:()=>open(13)}
- ],null,{trigger:document.activeElement});
-}
 const settingsDesktop = matchMedia('(min-width:1000px)');
 const settingsStyle = document.createElement('style');
 settingsStyle.textContent = '@media(min-width:1000px){body.settings-pinned #drawer{top:88px;bottom:12px;left:12px;width:260px;padding:16px 8px;opacity:1!important;visibility:visible!important;transform:none!important;border-radius:20px}body.settings-pinned #drawer-backdrop,body.settings-pinned #hamburger{display:none!important}body.settings-pinned main{margin-left:284px!important;margin-right:24px!important;width:calc(100% - 308px)!important;max-width:none!important}}';
