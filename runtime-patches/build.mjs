@@ -9,7 +9,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const [input, output] = process.argv.slice(2);
 assert.ok(input && output, 'Usage: node build.mjs input-binary output-binary');
 const binary = await readFile(input);
-const manifest = {version: '2026.11.20-000002', upstream_binary_sha256: '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', assets: {}};
+const manifest = {version: '2026.11.20-000003', upstream_binary_sha256: '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', assets: {}};
 assert.equal(createHash('sha256').update(binary).digest('hex'), '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', 'Unsupported upstream binary; review and pin its assets before updating');
 assert.equal(binary.subarray(0, 4).toString('hex'), '7f454c46');
 assert.equal(binary[4], 2);
