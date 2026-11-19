@@ -1,0 +1,2 @@
+runtime-patches/upstream/*.js text eol=lf
+runtime-patches/web/*.js text eol=lf

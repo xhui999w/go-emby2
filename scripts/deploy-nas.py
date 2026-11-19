@@ -85,6 +85,10 @@ lock = (project / '.go-emby2-update.lock').open('w')
 os.fchmod(lock.fileno(), 0o600)
 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 application = inspect('go-emby')
+published = [(int(host['HostPort']), int(container.split('/')[0])) for container, hosts in application['HostConfig']['PortBindings'].items() for host in hosts or [] if host.get('HostPort')]
+if len(set(published)) != 1:
+    raise SystemExit('Expected one published application port')
+production_port, internal_port = published[0]
 labels = application['Config']['Labels']
 project_name = labels['com.docker.compose.project']
 if project_name != 'go-emby':
@@ -208,8 +212,8 @@ os.replace(replacement, compose)
 try:
     print('Updating only the go-emby application container', flush=True)
     command('docker', 'compose', '-p', project_name, '-f', str(compose), 'up', '-d', '--no-deps', '--pull', 'never', 'go-emby')
-    wait_health(8097)
-    verify_assets(8097, manifest)
+    wait_health(production_port)
+    verify_assets(production_port, manifest)
     if command('docker', 'compose', '-p', project_name, '-f', str(compose), 'ps', '-q', 'postgres') != database_id:
         raise RuntimeError('Database container unexpectedly changed')
     actual_image = inspect('go-emby')['Config']['Image']
@@ -223,6 +227,6 @@ except Exception:
     shutil.copymode(compose, replacement)
     os.replace(replacement, compose)
     command('docker', 'compose', '-p', project_name, '-f', str(compose), 'up', '-d', '--no-deps', '--pull', 'never', 'go-emby')
-    wait_health(8097)
+    wait_health(production_port)
     print('Restored the previous application image after failed deployment verification', flush=True)
     raise
