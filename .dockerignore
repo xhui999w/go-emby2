@@ -1,6 +1,15 @@
 # Only build inputs are admitted; secrets and local runtime data stay outside.
 **
 !Dockerfile
+!Dockerfile.nas
+!runtime-patches/
+!runtime-patches/package.json
+!runtime-patches/pnpm-lock.yaml
+!runtime-patches/build.mjs
+!runtime-patches/upstream/
+!runtime-patches/upstream/*.js
+!runtime-patches/web/
+!runtime-patches/web/*.js
 !go.mod
 !go.sum
 !*.go

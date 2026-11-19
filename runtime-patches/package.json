@@ -1,0 +1,9 @@
+{
+  "name": "go-emby2-runtime-patches",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "dependencies": {
+    "terser": "5.51.2"
+  }
+}

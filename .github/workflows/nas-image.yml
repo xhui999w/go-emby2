@@ -1,0 +1,61 @@
+name: Build NAS image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.nas
+      - runtime-patches/**
+      - .github/workflows/nas-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: nas-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build pinned runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.nas
+          platforms: linux/amd64
+          load: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+            ${{ steps.image.outputs.name }}:latest
+          build-args: SOURCE_REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=nas-image
+          cache-to: type=gha,mode=max,scope=nas-image
+      - name: Export deployable image
+        run: docker save '${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}' | gzip -1 > go-emby2-linux-amd64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-emby2-linux-amd64
+          path: go-emby2-linux-amd64.tar.gz
+          retention-days: 14
+      - name: Publish own image
+        run: |
+          docker push '${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}'
+          docker push '${{ steps.image.outputs.name }}:latest'

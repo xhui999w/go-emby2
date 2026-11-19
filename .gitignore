@@ -43,3 +43,5 @@ secrets/*
 *.sqlite
 *.sqlite3
 postgres-data/
+runtime-patches/dist/
+pnpm-store/
