@@ -387,7 +387,45 @@ async function scanMedia(id,mode){if(!await confirmScan(mode==='scan'?'全量扫
 function libraryPathRow(){return `<div class="row"><input name="path" required readonly role="button" aria-haspopup="dialog" aria-label="媒体目录" placeholder="点击选择媒体目录" onclick="run(()=>pickDirectory(p=>{this.value=p}))()"><button type="button" class="secondary" aria-label="添加目录" onclick="this.closest('#library-paths').insertAdjacentHTML('beforeend',libraryPathRow())">＋ 添加</button><button type="button" class="secondary" aria-label="移除目录" onclick="if(this.closest('#library-paths').children.length>1)this.parentElement.remove()">−</button></div>`}
 function proxyPortRow(port=''){return `<div class="row"><label>反代端口<input name="port" type="number" min="1" max="65535" required value="${esc(port)}" placeholder="例如 7799"></label><button type="button" class="secondary icon-button" aria-label="移除端口" onclick="this.closest('.row').remove()">−</button></div>`}
 async function proxyPortsDialog(){const c=await api('/admin/enhancements');fmDialog('设置第三方工具反代端口',`<p>填写已配置的第三方工具反代端口，例如 NanShare 的 7799。第一个端口作为直连8097时的默认播放入口；通过其他入口访问时保留当前入口。</p><div id="proxy-ports">${(c.ThirdPartyProxyPorts||[]).map(proxyPortRow).join('')}</div><button type="button" class="secondary icon-button round-add" title="添加端口" aria-label="添加端口" onclick="document.querySelector('#proxy-ports').insertAdjacentHTML('beforeend',proxyPortRow());document.querySelector('#proxy-ports').lastElementChild.querySelector('input').focus()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`,async f=>{const ports=f.getAll('port').map(Number);await api('/admin/enhancements','PUT',{ThirdPartyProxyPorts:ports});$('#proxy-port-summary').textContent=ports.join('、')||'未设置';toast('反代端口已保存')})}
-function newLibrary(){fmDialog('新建媒体库',`<label>媒体库类型<select name="kind"><option value="movies">电影</option><option value="tvshows">电视剧</option></select></label><label>媒体库名称<input name="name" required></label><div id="library-paths">${libraryPathRow()}</div>`,async f=>{const paths=f.getAll('path');if(paths.some(p=>!p))throw Error('请选择目录');await api('/admin/libraries','POST',{Name:f.get('name'),Kind:f.get('kind'),Paths:paths});await refreshLibraries();toast('已加入队列，请在实时日志中查看')})}
+function newLibrary(){fmDialog('新建媒体库',`<button type="button" class="secondary" id="batch-libraries">批量添加媒体库</button><label>媒体库类型<select name="kind"><option value="movies">电影</option><option value="tvshows">电视剧</option></select></label><label>媒体库名称<input name="name" required></label><div id="library-paths">${libraryPathRow()}</div>`,async f=>{const paths=f.getAll('path');if(paths.some(p=>!p))throw Error('请选择目录');await api('/admin/libraries','POST',{Name:f.get('name'),Kind:f.get('kind'),Paths:paths});await refreshLibraries();toast('已加入队列，请在实时日志中查看')});$('#batch-libraries').onclick=()=>{const kind=$('#modal [name=kind]').value;$('#modal').close();batchLibraries(kind)}}
+function batchLibraries(kind='movies'){
+  let paths=[],importing=false;
+  fmDialog('批量添加媒体库',`<label>媒体库类型<select name="kind"><option value="movies">电影</option><option value="tvshows">电视剧</option></select></label><p>每个所选目录分别创建一个媒体库，以目录名命名。保存后递归扫描整个目录，不受目录列表分页影响。</p><button type="button" class="secondary" id="batch-choose">勾选媒体目录</button><p id="batch-count" role="status"></p><div id="batch-paths"></div>`,async form=>{
+    if(!paths.length)throw Error('请至少勾选一个目录');
+    importing=true;
+    const controls=[...$('#modal').querySelectorAll('button,select')];
+    controls.forEach(control=>control.disabled=true);
+    let imported=0;
+    try{
+      const libraries=await api('/admin/libraries');
+      const existing=new Set(libraries.flatMap(library=>library.Locations||[library.Path]));
+      for(const path of [...paths]){
+        if(existing.has(path))throw Error(`目录已在媒体库中：${path}`);
+        await api('/admin/libraries','POST',{Name:path.split('/').filter(Boolean).pop(),Kind:form.get('kind'),Paths:[path]});
+        existing.add(path);
+        paths=paths.filter(selected=>selected!==path);
+        imported++;
+        render();
+      }
+      await refreshLibraries();
+      toast(`已创建 ${imported} 个媒体库，后台扫描中`);
+    }catch(error){
+      throw Error(`已创建 ${imported} 个媒体库；${error.message}。成功项已移出列表，请检查剩余目录。`);
+    }finally{
+      importing=false;
+      render();
+      controls.forEach(control=>control.disabled=false);
+    }
+  });
+  $('#modal [name=kind]').value=kind;
+  function render(){
+    $('#batch-count').textContent=`待导入 ${paths.length} 个媒体库`;
+    $('#batch-paths').innerHTML=paths.map((path,index)=>`<div class="row"><div class="info"><strong>${esc(path.split('/').filter(Boolean).pop())}</strong><small style="display:block;overflow-wrap:anywhere">${esc(path)}</small></div><button type="button" class="secondary" data-remove="${index}" aria-label="移除 ${esc(path)}" ${importing?'disabled':''}>移除</button></div>`).join('');
+    $('#batch-paths').querySelectorAll('[data-remove]').forEach(button=>button.onclick=()=>{paths.splice(Number(button.dataset.remove),1);render()});
+  }
+  $('#batch-choose').onclick=run(()=>pickDirectory(selected=>{paths=selected;render()},'/media','',{multiple:true,selected:paths}));
+  render();
+}
 async function scanAllMedia(){if(!await confirmScan('刷新全部媒体库？将更新新增、修改及删除的内容。'))return;await api('/admin/scan-all','POST',{});toast('全部媒体库已加入队列，请在实时日志中查看')}
 async function scheduleDialog(){const c=await api('/admin/scan-schedule');fmDialog('定时全量扫描',`<label class="row"><input name="enabled" type="checkbox" ${c.Enabled?'checked':''}>启用定时扫描</label><label>扫描频率<select name="frequency" onchange="scheduleFields(this.value)"><option value="daily">每日</option><option value="weekly">每周</option><option value="minutes">每分钟 / 分钟间隔</option></select></label><label id="schedule-week">星期<select name="weekday">${['周日','周一','周二','周三','周四','周五','周六'].map((v,i)=>`<option value="${i}" ${c.Weekday===i?'selected':''}>${v}</option>`).join('')}</select></label><label id="schedule-time">时间（UTC）<input type="time" name="time" value="${esc(c.Time)}" required></label><label id="schedule-minutes">间隔分钟<input type="number" name="minutes" min="1" max="10080" value="${c.Minutes}" required></label><p>任务繁忙时跳过重复定时扫描。${c.Enabled&&c.Next?'下次：'+esc(new Date(c.Next*1000).toLocaleString()):''}</p>`,async f=>{await api('/admin/scan-schedule','PUT',{Enabled:f.has('enabled'),Frequency:f.get('frequency'),Time:f.get('time'),Weekday:Number(f.get('weekday')),Minutes:Number(f.get('minutes'))});toast('定时扫描已保存')});$('#modal select[name="frequency"]').value=c.Frequency;scheduleFields(c.Frequency)}
 function scheduleFields(v){$('#schedule-week').hidden=v!=='weekly';$('#schedule-time').hidden=v==='minutes';$('#schedule-minutes').hidden=v!=='minutes'}
@@ -395,7 +433,51 @@ function scheduleFields(v){$('#schedule-week').hidden=v!=='weekly';$('#schedule-
 function folderPage(id){fmLibrary=id;const lib=adminLibs.find(x=>x.Id===id);if(!lib)return;adminSection(0);document.querySelectorAll('.admin-section')[0].innerHTML=`<button class="secondary icon-button " title="媒体列表" aria-label="媒体列表" onclick="mediaPage()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div class="fm-toolbar"><h2>${esc(lib.Name)}</h2><button class="secondary icon-button round-add" title="新建媒体文件夹" aria-label="新建媒体文件夹" onclick="run(()=>pickFolder('${id}'))()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><div class="scan-circle" title="扫描进度" role="progressbar" aria-valuemin="0" aria-valuemax="100"><span>0%</span></div></div><div class="fm-list">${(lib.Locations||[]).map((p,i)=>`<div class="fm-row">${fmIcon('folder')}<div class="fm-name">${esc(p.split('/').pop()||'media')}<small>${esc(p)}</small></div>${fmMenu(fmButton('修改目录',`await pickFolder('${id}',${i})`)+fmButton('移除目录',`await removeFolder('${id}',${i})`,true))}</div>`).join('')||'<p class="empty">暂无媒体文件夹</p>'}</div>`}
 async function pickFolder(id,index){const old=index===undefined?'':adminLibs.find(x=>x.Id===id).Locations[index];fmDialog(old?'修改目录':'新建媒体文件夹',`<label>目录<input name="path" id="fm-path" readonly required role="button" aria-haspopup="dialog" placeholder="点击选择媒体目录" value="${esc(old)}"></label>`,async f=>{if(!f.get('path'))throw Error('请选择目录');await api('/admin/library-folders',old?'PUT':'POST',{ID:id,Path:f.get('path'),OldPath:old});fmLibrary=id;await refreshLibraries();toast('已加入队列，请在实时日志中查看')});$('#fm-path').onclick=run(()=>pickDirectory(p=>{$('#fm-path').value=p},old||'/media'))}
 async function removeFolder(id,index){const path=adminLibs.find(x=>x.Id===id).Locations[index];if(!confirm('移除此目录的索引？源文件保留。'))return;await api('/admin/library-folders','DELETE',{ID:id,Path:path});await refreshLibraries()}
-async function pickDirectory(select,path='/media',after=''){let d=$('#fm-picker');if(!d){d=document.createElement('dialog');d.id='fm-picker';document.body.appendChild(d);d.addEventListener('click',e=>{const r=d.getBoundingClientRect();if(e.target===d&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))d.close()})}const b=await api('/admin/directories?'+new URLSearchParams({Path:path,After:after}));d.innerHTML=`<h2>选择目录</h2><p class="picker-path">${esc(b.Path)}</p><div class="directory-list">${b.Directories.map((x,i)=>`<button class="secondary" data-index="${i}">${fmIcon('folder')}<span class="directory-name">${esc(x.Name)}</span><span aria-hidden="true">›</span></button>`).join('')||'<p class="empty">此目录没有子文件夹</p>'}${b.Next?'<button id="fm-next" class="secondary">下一页</button>':''}</div><footer class="picker-actions"><button id="fm-up" class="secondary" ${b.Path==='/media'?'disabled':''}>上一级</button><button id="fm-select">选择此目录</button></footer>`;if(!d.open)d.showModal();$('#fm-select').onclick=()=>{select(b.Path);d.close()};$('#fm-up').onclick=run(()=>pickDirectory(select,b.Path.slice(0,b.Path.lastIndexOf('/'))||'/media'));$('#fm-next')?.addEventListener('click',run(()=>pickDirectory(select,b.Path,b.Next)));d.querySelectorAll('[data-index]').forEach(el=>el.onclick=run(async()=>{el.classList.add('selected');await pickDirectory(select,b.Directories[Number(el.dataset.index)].Path)}))}
+async function pickDirectory(select,path='/media',after='',options={}){
+  let dialog=$('#fm-picker');
+  if(!dialog){
+    dialog=document.createElement('dialog');
+    dialog.id='fm-picker';
+    document.body.appendChild(dialog);
+    dialog.addEventListener('click',event=>{const bounds=dialog.getBoundingClientRect();if(event.target===dialog&&(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom))dialog.close()});
+  }
+  const multiple=!!options.multiple,selected=new Set(options.selected||[]);
+  let choice='',request=0;
+  async function render(directory,cursor=''){
+    const currentRequest=++request;
+    const listing=await api('/admin/directories?'+new URLSearchParams({Path:directory,After:cursor}));
+    if(currentRequest!==request)return;
+    if(!multiple)choice=listing.Path;
+    dialog.innerHTML=`<style>#fm-picker .directory-row{display:flex;align-items:center;flex-shrink:0;border-bottom:1px solid #ffffff12}#fm-picker .directory-check{display:flex;align-items:center;justify-content:center;flex:0 0 48px;min-height:48px;cursor:pointer}#fm-picker .directory-check input{appearance:auto!important;position:static!important;opacity:1!important;width:22px!important;height:22px!important;min-height:0!important;padding:0!important;margin:0!important;accent-color:#319f73;cursor:pointer}#fm-picker .directory-row button{flex:1;min-width:0;width:auto}#fm-picker .directory-row:has(input:checked){background:#42bc8a20}#fm-picker .directory-select-all{display:flex;gap:10px;align-items:center;margin-bottom:8px}#fm-picker .picker-actions{flex-wrap:wrap}#fm-picker #fm-count{flex-basis:100%;margin:0;font-size:13px}</style><h2>${multiple?'勾选媒体目录':'选择目录'}</h2><p class="picker-path">${esc(listing.Path)}</p><p>勾选左侧可直接选择整个目录；点击右侧进入子目录。扫描包含所选目录下全部支持的媒体文件。</p>${multiple?'<label class="directory-select-all"><input type="checkbox" id="fm-all">全选本页目录（不是全部页面）</label>':''}<div class="directory-list">${listing.Directories.map((entry,index)=>`<div class="directory-row"><label class="directory-check"><input type="${multiple?'checkbox':'radio'}" name="directory-choice" data-choice="${index}" aria-label="选择 ${esc(entry.Name)}" ${multiple&&selected.has(entry.Path)?'checked':''}></label><button type="button" class="secondary" data-index="${index}" aria-label="进入 ${esc(entry.Name)}"><span class="directory-name">${esc(entry.Name)}</span><span aria-hidden="true">›</span></button></div>`).join('')||'<p class="empty">此目录没有子文件夹</p>'}${listing.Next?'<button type="button" id="fm-next" class="secondary">下一页目录</button>':''}</div><footer class="picker-actions"><p id="fm-count" role="status"></p><button type="button" id="fm-up" class="secondary" ${listing.Path==='/media'?'disabled':''}>上一级</button><button type="button" id="fm-cancel" class="secondary">取消</button><button type="button" id="fm-select"></button></footer>`;
+    dialog.querySelectorAll('button').forEach(button=>button.style.setProperty('color','#f7f7f8','important'));
+    function update(){
+      const count=$('#fm-count'),confirm=$('#fm-select');
+      count.textContent=multiple?`已选 ${selected.size} 个目录（跨页保留），每个目录创建一个媒体库`:`将扫描整个目录：${choice}`;
+      confirm.textContent=multiple?`使用所选目录（${selected.size}）`:choice===listing.Path?'选择此目录':'选择勾选目录';
+      confirm.disabled=multiple&&!selected.size;
+      const all=$('#fm-all');
+      if(all){const checked=listing.Directories.filter(entry=>selected.has(entry.Path)).length;all.checked=!!checked&&checked===listing.Directories.length;all.indeterminate=checked>0&&checked<listing.Directories.length;all.disabled=!listing.Directories.length}
+    }
+    dialog.querySelectorAll('[data-choice]').forEach(input=>input.onchange=()=>{
+      const entry=listing.Directories[Number(input.dataset.choice)];
+      if(multiple){if(input.checked)selected.add(entry.Path);else selected.delete(entry.Path)}else choice=entry.Path;
+      update();
+    });
+    $('#fm-all')?.addEventListener('change',event=>{
+      listing.Directories.forEach(entry=>{if(event.target.checked)selected.add(entry.Path);else selected.delete(entry.Path)});
+      dialog.querySelectorAll('[data-choice]').forEach(input=>input.checked=event.target.checked);
+      update();
+    });
+    $('#fm-select').onclick=()=>{select(multiple?[...selected]:choice);dialog.close()};
+    $('#fm-cancel').onclick=()=>dialog.close();
+    $('#fm-up').onclick=run(()=>render(listing.Path.slice(0,listing.Path.lastIndexOf('/'))||'/media'));
+    $('#fm-next')?.addEventListener('click',run(()=>render(listing.Path,listing.Next)));
+    dialog.querySelectorAll('[data-index]').forEach(button=>button.onclick=run(()=>render(listing.Directories[Number(button.dataset.index)].Path)));
+    update();
+    if(!dialog.open)dialog.showModal();
+  }
+  await render(path,after);
+}
 
 function loginAge(n){if(!n)return '从未登录';const s=Math.max(0,Date.now()/1000-n);if(s>=604800)return '一周前';if(s>=86400)return Math.floor(s/86400)+'天前';if(s>=3600)return Math.floor(s/3600)+'小时前';if(s>=60)return Math.floor(s/60)+'分钟前';return '刚刚'}
 function renderUsers(){const list=[...fmUsers].sort((a,b)=>fmSort==='name'?a.Name.localeCompare(b.Name,'zh-CN'):fmSort==='oldest'?a.LastLoginDate-b.LastLoginDate:b.LastLoginDate-a.LastLoginDate);document.querySelectorAll('.admin-section')[1].innerHTML=`<div class="fm-toolbar"><h2>用户管理</h2><button class="secondary icon-button round-add" title="新建用户" aria-label="新建用户" onclick="editUser()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><select aria-label="排序" onchange="fmSort=this.value;renderUsers()"><option value="recent" ${fmSort==='recent'?'selected':''}>最近登录优先</option><option value="oldest" ${fmSort==='oldest'?'selected':''}>最久未登录优先</option><option value="name" ${fmSort==='name'?'selected':''}>按名称排序</option></select></div><div class="fm-list">${list.map(x=>`<div class="fm-row">${fmIcon('user')}<div class="fm-name">${esc(x.Name)}<small>${x.FirstAdmin?'首位管理员 · ':''}${x.Policy.EnableMediaPlayback?'允许播放':'禁止播放'} · ${x.MaxDevices} 台设备</small></div><time class="fm-login" title="${x.LastLoginDate?esc(new Date(x.LastLoginDate*1000).toLocaleString()):'从未登录'}">${loginAge(x.LastLoginDate)}</time>${fmMenu(fmButton('修改用户名和密码',`editUser('${x.Id}','identity')`)+fmButton('修改用户权限',`editUser('${x.Id}','permissions')`)+(!x.FirstAdmin&&x.Id!==user.Id?fmButton('删除用户',`await deleteUser('${x.Id}')`,true):''))}</div>`).join('')}</div>`}
