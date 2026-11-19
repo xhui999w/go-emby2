@@ -27,6 +27,11 @@ def inspect(container):
     return json.loads(command('docker', 'inspect', container))[0]
 
 
+def write_private(destination, content):
+    destination.write_text(content)
+    destination.chmod(0o600)
+
+
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -77,6 +82,7 @@ if not re.fullmatch(r'ghcr\.io/xhui999w/go-emby2:sha-[0-9a-f]{12}', arguments.im
     raise SystemExit('A fixed go-emby2 image tag is required')
 os.umask(0o077)
 lock = (project / '.go-emby2-update.lock').open('w')
+os.fchmod(lock.fileno(), 0o600)
 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 application = inspect('go-emby')
 labels = application['Config']['Labels']
@@ -99,13 +105,17 @@ revision = arguments.image.rsplit('-', 1)[1]
 timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
 backup = project / 'update-backups' / (timestamp + '-' + revision)
 backup.mkdir(parents=True, mode=0o700)
+backup.parent.chmod(0o700)
+backup.chmod(0o700)
 original = compose.read_text()
-(backup / 'docker-compose.yaml').write_text(original)
-(backup / 'container.json').write_text(json.dumps(application, indent=2))
+write_private(backup / 'docker-compose.yaml', original)
+write_private(backup / 'container.json', json.dumps(application, indent=2))
 print(f'Backing up application and database to {backup}', flush=True)
 with (backup / 'database.dump').open('wb') as output:
+    os.fchmod(output.fileno(), 0o600)
     command('docker', 'exec', database_id, 'pg_dump', '-U', database_user, '-d', database_name, '-Fc', output=output)
 with (backup / 'app-data.tar.gz').open('wb') as output:
+    os.fchmod(output.fileno(), 0o600)
     command('docker', 'exec', 'go-emby', 'tar', 'czf', '-', '-C', '/app/data', '.', output=output)
 networks = set(application['NetworkSettings']['Networks']) & set(database['NetworkSettings']['Networks'])
 if len(networks) != 1:
@@ -124,6 +134,7 @@ else:
     database_url = f'postgres://{username}:{password}@postgres:5432/{test_database}?sslmode=disable'
 stage = project / ('stage-' + timestamp + '-' + revision)
 stage.mkdir(mode=0o700)
+stage.chmod(0o700)
 data = stage / 'data'
 media = stage / 'media'
 data.mkdir()
@@ -139,7 +150,7 @@ environment.update({'DATABASE_URL': database_url, 'ADMIN_PASSWORD': admin_passwo
                     'MEDIA_INFO_ROOT': '/app/data', 'FILE_MANAGER_ROOT': '/media', 'MEDIA_ROOTS': '/media',
                     'PUBLIC_URL': '', 'PORT': '8097', 'LISTEN': ':8097'})
 environment_file = stage / 'stage.env'
-environment_file.write_text(''.join(f'{key}={value}\n' for key, value in environment.items()))
+write_private(environment_file, ''.join(f'{key}={value}\n' for key, value in environment.items()))
 stage_container = 'go-emby2-check-' + revision
 database_created = False
 container_created = False
@@ -173,7 +184,7 @@ try:
         time.sleep(1)
     else:
         raise RuntimeError('Isolated full-directory scan did not reach the expected counts')
-    (backup / 'staging-passed.json').write_text(json.dumps({'image': arguments.image, 'counts': counts, 'manifest': manifest}, indent=2))
+    write_private(backup / 'staging-passed.json', json.dumps({'image': arguments.image, 'counts': counts, 'manifest': manifest}, indent=2))
 finally:
     if container_created:
         command('docker', 'rm', '-f', stage_container)
@@ -204,7 +215,7 @@ try:
     actual_image = inspect('go-emby')['Config']['Image']
     if actual_image != arguments.image:
         raise RuntimeError('The running image does not match the requested fixed version')
-    (backup / 'deployment-passed.json').write_text(json.dumps({'image': actual_image, 'version': manifest['version']}))
+    write_private(backup / 'deployment-passed.json', json.dumps({'image': actual_image, 'version': manifest['version']}))
     print(json.dumps({'status': 'deployed', 'image': actual_image, 'version': manifest['version'], 'backup': str(backup)}, ensure_ascii=False), flush=True)
 except Exception:
     rollback = re.sub(pattern, lambda match: match[1] + application['Image'], original)
