@@ -9,6 +9,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const [input, output] = process.argv.slice(2);
 assert.ok(input && output, 'Usage: node build.mjs input-binary output-binary');
 const binary = await readFile(input);
+const manifest = {version: '2026.11.19-000001', upstream_binary_sha256: '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', assets: {}};
 assert.equal(createHash('sha256').update(binary).digest('hex'), '538421f40eb93b8aa8a5e63587aea1224b6a337d70fc352d727c4dabbf4ee2d8', 'Unsupported upstream binary; review and pin its assets before updating');
 assert.equal(binary.subarray(0, 4).toString('hex'), '7f454c46');
 assert.equal(binary[4], 2);
@@ -41,8 +42,11 @@ for (const name of ['admin-directories.js', 'admin-libraries.js']) {
   assert.ok(dataRanges.some(([start, end]) => offset >= start && offset + original.length <= end), `${name}: asset must be entirely outside executable segments`);
   binary.fill(32, offset, offset + original.length);
   replacement.copy(binary, offset);
+  manifest.assets['/web/js/' + name] = createHash('sha256').update(binary.subarray(offset, offset + original.length)).digest('hex');
   await writeFile(path.join(directory, 'dist', name), replacement);
   console.log(`${name}: ${replacement.length}/${original.length} bytes`);
 }
 await writeFile(output, binary, {mode: 0o755});
+manifest.binary_sha256 = createHash('sha256').update(binary).digest('hex');
+await writeFile(path.join(directory, 'dist', 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log(`Patched asset data only; binary length remains ${binary.length}`);

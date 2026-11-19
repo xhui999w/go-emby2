@@ -15,3 +15,4 @@ LABEL org.opencontainers.image.title="go-emby2" \
       org.opencontainers.image.revision=$SOURCE_REVISION \
       org.opencontainers.image.description="Pinned Go-Emby runtime with maintained directory import fixes"
 COPY --from=patch --chmod=0755 /patch/patched-binary /usr/local/bin/go-emby
+COPY --from=patch /patch/dist/manifest.json /usr/local/share/go-emby2/patch-manifest.json
