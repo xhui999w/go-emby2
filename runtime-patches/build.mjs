@@ -23,6 +23,13 @@ for (let index = 0; index < headerCount; index++) {
   dataRanges.push([start, start + Number(binary.readBigUInt64LE(offset + 32))]);
 }
 await mkdir(path.join(directory, 'dist'), {recursive: true});
+const oldVersion = Buffer.from('2026.11.17-160707');
+const newVersion = Buffer.from('2026.11.19-000001');
+const versionOffset = binary.indexOf(oldVersion);
+assert.ok(versionOffset >= 0 && binary.indexOf(oldVersion, versionOffset + 1) === -1, 'Expected one build version constant');
+assert.equal(oldVersion.length, newVersion.length);
+assert.ok(dataRanges.some(([start, end]) => versionOffset >= start && versionOffset + oldVersion.length <= end));
+newVersion.copy(binary, versionOffset);
 for (const name of ['admin-directories.js', 'admin-libraries.js']) {
   const original = await readFile(path.join(directory, 'upstream', name));
   const modified = await readFile(path.join(directory, 'web', name), 'utf8');

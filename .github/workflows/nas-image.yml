@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -59,3 +59,12 @@ jobs:
         run: |
           docker push '${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}'
           docker push '${{ steps.image.outputs.name }}:latest'
+      - name: Publish deployment archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create 'nas-${{ steps.image.outputs.tag }}' go-emby2-linux-amd64.tar.gz \
+            --target '${{ github.sha }}' --prerelease \
+            --title 'NAS ${{ steps.image.outputs.tag }}' \
+            --notes 'Version-pinned amd64 deployment image. Preserves the current upstream backend and includes maintained directory import fixes. Deploy only after NAS validation.'
