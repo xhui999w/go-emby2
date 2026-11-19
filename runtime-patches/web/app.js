@@ -203,7 +203,7 @@ function syncSettingsEntry(){
  button.setAttribute('aria-current',view==='admin'?'page':'false');
 }
 new MutationObserver(syncSettingsEntry).observe($('#nav'),{childList:true,subtree:true});
-settingsDesktop.addEventListener('change',()=>{if(view==='admin')nav()});
+settingsDesktop.addEventListener('change',()=>{if(view==='admin'||view==='files')nav()});
 function nav(){
  window.TaskStream?.sync();
  if(view!=="admin"){
@@ -214,7 +214,7 @@ function nav(){
   }
  }
  if(renderedView!==view){$("#app")?.replaceChildren();renderedView=view; if(view!=="browse" && typeof resumeMenuAbort!=="undefined") { resumeMenuAbort.abort(); resumeMenuAbort=new AbortController(); }}
- document.body.classList.toggle('settings-pinned',view==='admin'&&settingsDesktop.matches);
+ document.body.classList.toggle('settings-pinned',(view==='admin'||view==='files')&&settingsDesktop.matches);
  document.body.classList.toggle("media-view",view==="browse");document.body.classList.toggle("admin-view",view==="admin");toggleDrawer(false);const n=$("#nav");if(!n)return;
  const navContext=JSON.stringify([!!token,view,user?.Id,user?.Name]);
  if(n.dataset.context!==navContext){WebUI.mountTemplate(n, 'navigation-template');n.dataset.context=navContext;}
